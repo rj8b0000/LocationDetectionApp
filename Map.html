@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Draw Custom Shapes - Leaflet.js</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      #map {
+        height: 100%;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet.Draw -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <script>
+      // Initialize the map
+      const map = L.map('map').setView([18.591854, 73.769711], 14); // Default center and zoom
+
+      // Add OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Initialize the Leaflet.Draw plugin
+      const drawnItems = new L.FeatureGroup();
+      map.addLayer(drawnItems);
+
+      const drawControl = new L.Control.Draw({
+        edit: {
+          featureGroup: drawnItems,
+          remove: true,
+        },
+        draw: {
+          polygon: true,
+          circle: true,
+          rectangle: false,
+          polyline: false,
+          marker: false,
+        },
+      });
+      map.addControl(drawControl);
+
+      // Event listener for shape creation
+      map.on(L.Draw.Event.CREATED, function (event) {
+        const layer = event.layer;
+
+        if (event.layerType === 'polygon') {
+          // Get polygon coordinates
+          const coordinates = layer.getLatLngs()[0].map(latLng => ({
+            latitude: latLng.lat,
+            longitude: latLng.lng,
+          }));
+          console.log('Polygon Coordinates:', coordinates);
+          alert(`Polygon Coordinates: ${JSON.stringify(coordinates, null, 2)}`);
+        }
+
+        if (event.layerType === 'circle') {
+          // Get circle center and radius
+          const center = layer.getLatLng();
+          const radius = layer.getRadius();
+          console.log('Circle Center:', {
+            latitude: center.lat,
+            longitude: center.lng,
+          });
+          console.log('Circle Radius (meters):', radius);
+          alert(
+            `Center: ${JSON.stringify({
+              latitude: center.lat,
+              longitude: center.lng,
+            })}, Radius: ${radius}`,
+          );
+        }
+
+        // Add the layer to the map
+        drawnItems.addLayer(layer);
+      });
+    </script>
+  </body>
+</html>
