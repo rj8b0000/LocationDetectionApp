@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useNavigation} from '@react-navigation/native';
 import React, {useState, useEffect, useRef} from 'react';
 import {
   View,
@@ -13,6 +12,7 @@ import {
   Alert,
   Linking,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
@@ -28,6 +28,8 @@ const HomeScreen = ({route, navigation}) => {
   const [refreshing, setRefreshing] = useState(false);
   const scrollViewRef = useRef(null);
   const {user} = route.params;
+  // Animation value for crawler
+  const crawlAnimation = useRef(new Animated.Value(0)).current;
 
   // Base URL for slider images
   const BASE_URL = 'http://10.0.2.2:8000';
@@ -63,7 +65,7 @@ const HomeScreen = ({route, navigation}) => {
     } catch (error) {
       console.error('Error fetching statistics:', error.message);
       Alert.alert('Error', 'Failed to load statistics data.', [{text: 'OK'}]);
-      setStatisticsData({toggle: 0}); // Default to hiding Statistics if API fails
+      setStatisticsData({toggle: 0});
     }
   };
 
@@ -80,18 +82,46 @@ const HomeScreen = ({route, navigation}) => {
     fetchData();
   }, []);
 
-  // Polling: Fetch data every 30 seconds
+  // Auto-scroll for slider
+  useEffect(() => {
+    if (sliders.length === 0) return;
+
+    const intervalId = setInterval(() => {
+      const nextIndex = (currentImageIndex + 1) % sliders.length;
+      setCurrentImageIndex(nextIndex);
+      scrollViewRef.current?.scrollTo({
+        x: nextIndex * width,
+        animated: true,
+      });
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [currentImageIndex, sliders.length]);
+
+  // Text crawler animation
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(crawlAnimation, {
+        toValue: -width, // Move text one screen width to the left
+        duration: 7000, // 5 seconds for one full cycle
+        useNativeDriver: true,
+      }),
+    ).start();
+
+    return () => crawlAnimation.setValue(0); // Reset on unmount
+  }, [crawlAnimation]);
+
+  // Polling: Fetch data every 60 seconds
   useEffect(() => {
     const intervalId = setInterval(() => {
       console.log('Polling for updates...');
       fetchData();
     }, 60000);
 
-    // Cleanup interval on component unmount
     return () => clearInterval(intervalId);
   }, []);
 
-  // Base activities array (excluding Statistics initially)
+  // Base activities array
   const baseActivities = [
     {
       id: 2,
@@ -114,13 +144,6 @@ const HomeScreen = ({route, navigation}) => {
       color: '#e67e22',
       icon: 'help-circle',
     },
-    // {
-    //   id: 5,
-    //   title: 'Logout',
-    //   subtitle: 'Logout',
-    //   color: '#DC2626',
-    //   icon: 'exit-outline',
-    // },
   ];
 
   // Conditionally add Statistics to activities if toggle is 1
@@ -172,10 +195,10 @@ const HomeScreen = ({route, navigation}) => {
 
   const handleActivityPress = async activity => {
     switch (activity.id) {
-      case 1: // Statistics
+      case 1:
         if (statisticsData?.link) {
           try {
-            const supported = await Linking.openURL(statisticsData.link);
+            const supported = await Linking.canOpenURL(statisticsData.link);
             if (supported) {
               await Linking.openURL(statisticsData.link);
             } else {
@@ -189,16 +212,16 @@ const HomeScreen = ({route, navigation}) => {
           }
         }
         break;
-      case 2: // Reports
+      case 2:
         navigation.navigate('Reports');
         break;
-      case 3: // Feedback
+      case 3:
         navigation.navigate('FeedbackScreen', {user});
         break;
-      case 4: // Help
+      case 4:
         navigation.navigate('Help');
         break;
-      case 5: // Logout
+      case 5:
         handleLogout();
         break;
       default:
@@ -222,9 +245,14 @@ const HomeScreen = ({route, navigation}) => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
         }>
-        {/* User Greeting */}
+        {/* User Greeting with Profile Icon */}
         <View style={styles.greetingContainer}>
           <Text style={styles.greetingText}>Welcome, {user.name}!</Text>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('EditProfileScreen', {user})}>
+            <Ionicons name="person-circle-outline" size={30} color="#1F2937" />
+          </TouchableOpacity>
         </View>
 
         {/* Hero Image Carousel */}
@@ -254,7 +282,6 @@ const HomeScreen = ({route, navigation}) => {
             ))}
           </ScrollView>
 
-          {/* Page Indicators */}
           <View style={styles.pageIndicators}>
             {sliders.map((_, index) => (
               <View
@@ -266,11 +293,39 @@ const HomeScreen = ({route, navigation}) => {
               />
             ))}
           </View>
+
+          {/* Text Crawler */}
+          <View style={styles.crawlerContainer}>
+            <View style={styles.crawlerWrapper}>
+              <Animated.Text
+                style={[
+                  styles.crawlerText,
+                  {
+                    transform: [{translateX: crawlAnimation}],
+                  },
+                ]}>
+                Stay updated with the latest news and announcements
+              </Animated.Text>
+              <Animated.Text
+                style={[
+                  styles.crawlerText,
+                  {
+                    transform: [
+                      {
+                        translateX: Animated.add(crawlAnimation, width),
+                      },
+                    ],
+                  },
+                ]}>
+                Stay updated with the latest news and announcements
+              </Animated.Text>
+            </View>
+          </View>
         </View>
 
         {/* Activities Section */}
         <View style={styles.activitiesContainer}>
-          <View style={{height: heightPercentageToDP(15)}} />
+          <View style={{height: heightPercentageToDP(2)}} />
           <Text style={styles.sectionTitle}>Activities</Text>
           <View style={styles.activitiesGrid}>
             {activities.map(activity => (
@@ -317,6 +372,9 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   greetingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
@@ -325,16 +383,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1F2937',
   },
+  profileButton: {
+    padding: 8,
+  },
   heroContainer: {
     position: 'relative',
     marginBottom: 32,
   },
   imageCarousel: {
     height: 200,
+    width: width,
   },
   imageContainer: {
     width: width,
     height: 200,
+    paddingHorizontal: '1.5%',
   },
   heroImage: {
     width: '100%',
@@ -361,6 +424,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     width: 24,
   },
+  crawlerContainer: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 8,
+    overflow: 'hidden',
+    width: '91%',
+    marginHorizontal: '4%',
+  },
+  crawlerWrapper: {
+    flexDirection: 'row',
+  },
+  crawlerText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    paddingHorizontal: 10, // Ensure text doesn't touch edges
+  },
   activitiesContainer: {
     paddingHorizontal: 20,
     paddingBottom: 32,
@@ -377,7 +456,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   activityCard: {
-    width: (width - 60) / 2, // Account for padding and gap
+    width: (width - 60) / 2,
     height: 120,
     borderRadius: 16,
     marginBottom: 16,

@@ -13,6 +13,7 @@ import OTPInputScreen from '../screens/OTPInputScreen';
 import NewPasswordScreen from '../screens/NewPasswordScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import SplashScreen from '../screens/SplashScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -64,6 +65,11 @@ const AppNavigator = () => {
           <Stack.Screen
             name="FeedbackScreen"
             component={FeedbackScreen}
+            options={{headerShown: false}}
+          />
+          <Stack.Screen
+            name="EditProfileScreen"
+            component={EditProfileScreen}
             options={{headerShown: false}}
           />
         </Stack.Navigator>
