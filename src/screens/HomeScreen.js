@@ -23,56 +23,124 @@ const {width} = Dimensions.get('window');
 const HomeScreen = ({route, navigation}) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [sliders, setSliders] = useState([]);
-  const [statisticsData, setStatisticsData] = useState(null);
+  const [settings, setSettings] = useState({
+    modulesVisibility: {
+      sliders: true,
+      statistics: true,
+      reports: true,
+      feedback: true,
+      help: true,
+    },
+    sliderAutoScrollInterval: 5000,
+    statisticsLink: 'https://www.rocket.new/',
+  });
+  const [content, setContent] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const scrollViewRef = useRef(null);
   const {user} = route.params;
   // Animation value for crawler
   const crawlAnimation = useRef(new Animated.Value(0)).current;
+  // Track screen width for responsive carousel (updates on orientation changes)
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  useEffect(() => {
+    const onChange = ({window}) => {
+      setScreenWidth(window.width);
+    };
+    const subscription = Dimensions.addEventListener('change', onChange);
+    return () => {
+      // RN >=0.65 returns subscription with remove; older returns removeEventListener
+      if (typeof subscription?.remove === 'function') subscription.remove();
+      else Dimensions.removeEventListener?.('change', onChange);
+    };
+  }, []);
+  // Responsive slider height based on screen width (16:9), clamped
+  const sliderHeight = Math.max(180, Math.min(320, Math.round((screenWidth * 9) / 16)));
 
   // Base URL for slider images
-  const BASE_URL = 'http://10.0.2.2:8000';
+  const BASE_URL = 'http://10.0.2.2:8080';
 
   // Default hero images (fallback if API fails)
   const defaultHeroImages = [
-    'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=800&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=400&fit=crop',
+    {
+      _id: 'default1',
+      title: 'Default Slider 1',
+      imageUrl:
+        'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=800&h=400&fit=crop',
+      order: 0,
+      isActive: true,
+    },
+    {
+      _id: 'default2',
+      title: 'Default Slider 2',
+      imageUrl:
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=400&fit=crop',
+      order: 1,
+      isActive: true,
+    },
+    {
+      _id: 'default3',
+      title: 'Default Slider 3',
+      imageUrl:
+        'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=400&fit=crop',
+      order: 2,
+      isActive: true,
+    },
   ];
+
+  // Fetch settings from API
+  const fetchSettings = async () => {
+    try {
+      const response = await axios.get('http://10.0.2.2:8080/api/settings');
+      setSettings(response.data);
+      console.log('Settings fetched:', response.data);
+    } catch (error) {
+      console.error('Error fetching settings:', error.message);
+      Alert.alert('Error', 'Failed to load settings. Using default settings.', [
+        {text: 'OK'},
+      ]);
+    }
+  };
 
   // Fetch sliders from API
   const fetchSliders = async () => {
+    if (!settings.modulesVisibility.sliders) {
+      setSliders([]);
+      return;
+    }
     try {
-      const response = await axios.get('http://10.0.2.2:8000/api/sliders');
-      setSliders(response.data);
-      console.log('Sliders fetched:', response.data);
+      const response = await axios.get('http://10.0.2.2:8080/api/sliders');
+      // Filter active sliders and sort by order
+      const activeSliders = response.data
+        .filter(slider => slider.isActive)
+        .sort((a, b) => a.order - b.order);
+      setSliders(activeSliders);
+      console.log('Sliders fetched and sorted:', activeSliders);
     } catch (error) {
       console.error('Error fetching sliders:', error.message);
       Alert.alert('Error', 'Failed to load sliders. Using default images.', [
         {text: 'OK'},
       ]);
-      setSliders(defaultHeroImages.map(url => ({id: url, image_url: url})));
+      setSliders(defaultHeroImages);
     }
   };
-
-  // Fetch statistics data from API
-  const fetchStatistics = async () => {
+  const fetchContent = async () => {
     try {
-      const response = await axios.get('http://10.0.2.2:8000/api/statistics');
-      setStatisticsData(response.data);
-      console.log('Statistics fetched:', response.data);
+      const response = await axios.get('http://10.0.2.2:8080/api/contents');
+      setContent(response.data);
+      console.log('Content fetched:', response.data);
     } catch (error) {
-      console.error('Error fetching statistics:', error.message);
-      Alert.alert('Error', 'Failed to load statistics data.', [{text: 'OK'}]);
-      setStatisticsData({toggle: 0});
+      console.error('Error fetching settings:', error.message);
+      Alert.alert('Error', 'Failed to load settings. Using default settings.', [
+        {text: 'OK'},
+      ]);
     }
   };
 
   // Fetch data (used for initial load, polling, and refresh)
   const fetchData = async () => {
     setRefreshing(true);
-    await Promise.all([fetchSliders(), fetchStatistics()]);
+    await Promise.all([fetchSettings(), fetchSliders(), fetchContent()]);
     setRefreshing(false);
     setLoading(false);
   };
@@ -84,32 +152,34 @@ const HomeScreen = ({route, navigation}) => {
 
   // Auto-scroll for slider
   useEffect(() => {
-    if (sliders.length === 0) return;
+    if (sliders.length === 0 || !settings.modulesVisibility.sliders) return;
 
     const intervalId = setInterval(() => {
       const nextIndex = (currentImageIndex + 1) % sliders.length;
       setCurrentImageIndex(nextIndex);
       scrollViewRef.current?.scrollTo({
-        x: nextIndex * width,
+        x: nextIndex * screenWidth,
         animated: true,
       });
-    }, 3000);
+    }, settings.sliderAutoScrollInterval);
 
     return () => clearInterval(intervalId);
-  }, [currentImageIndex, sliders.length]);
+  }, [currentImageIndex, sliders.length, settings.sliderAutoScrollInterval]);
 
   // Text crawler animation
   useEffect(() => {
+    if (!settings.modulesVisibility.sliders) return;
+
     Animated.loop(
       Animated.timing(crawlAnimation, {
-        toValue: -width, // Move text one screen width to the left
-        duration: 7000, // 5 seconds for one full cycle
+        toValue: -width * 2,
+        duration: 10000,
         useNativeDriver: true,
       }),
     ).start();
 
-    return () => crawlAnimation.setValue(0); // Reset on unmount
-  }, [crawlAnimation]);
+    return () => crawlAnimation.setValue(0);
+  }, [crawlAnimation, settings.modulesVisibility.sliders]);
 
   // Polling: Fetch data every 60 seconds
   useEffect(() => {
@@ -129,6 +199,7 @@ const HomeScreen = ({route, navigation}) => {
       subtitle: 'Monthly summary',
       color: '#9333EA',
       icon: 'document-text',
+      visible: settings.modulesVisibility.reports,
     },
     {
       id: 3,
@@ -136,6 +207,7 @@ const HomeScreen = ({route, navigation}) => {
       subtitle: 'Your Opinion matters',
       color: '#059669',
       icon: 'chatbubble-ellipses',
+      visible: settings.modulesVisibility.feedback,
     },
     {
       id: 4,
@@ -143,26 +215,27 @@ const HomeScreen = ({route, navigation}) => {
       subtitle: 'Get support',
       color: '#e67e22',
       icon: 'help-circle',
+      visible: settings.modulesVisibility.help,
     },
   ];
 
-  // Conditionally add Statistics to activities if toggle is 1
+  // Conditionally add Statistics to activities if module is visible
   const statisticsActivity = {
     id: 1,
     title: 'Statistics',
     subtitle: 'View activity status',
     color: '#2563EB',
     icon: 'stats-chart',
+    visible: settings.modulesVisibility.statistics,
   };
 
-  const activities =
-    statisticsData?.toggle === 1
-      ? [statisticsActivity, ...baseActivities]
-      : baseActivities;
+  const activities = settings.modulesVisibility.statistics
+    ? [statisticsActivity, ...baseActivities]
+    : baseActivities;
 
   const handleScroll = event => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const index = Math.round(scrollPosition / width);
+    const index = Math.round(scrollPosition / screenWidth);
     setCurrentImageIndex(index);
   };
 
@@ -178,10 +251,11 @@ const HomeScreen = ({route, navigation}) => {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem('user');
-              console.log('User removed from AsyncStorage');
+              await AsyncStorage.removeItem('token');
+              console.log('User and token removed from AsyncStorage');
               navigation.replace('Location');
             } catch (error) {
-              console.error('Error removing user from AsyncStorage:', error);
+              console.error('Error removing data from AsyncStorage:', error);
               Alert.alert('Error', 'Failed to logout. Please try again.', [
                 {text: 'OK'},
               ]);
@@ -196,14 +270,14 @@ const HomeScreen = ({route, navigation}) => {
   const handleActivityPress = async activity => {
     switch (activity.id) {
       case 1:
-        if (statisticsData?.link) {
+        if (settings.statisticsLink) {
           try {
-            const supported = await Linking.canOpenURL(statisticsData.link);
-            if (supported) {
-              await Linking.openURL(statisticsData.link);
-            } else {
-              Alert.alert('Error', 'Cannot open this URL.', [{text: 'OK'}]);
-            }
+            // const supported = await Linking.canOpenURL(settings.statisticsLink);
+            // if (supported) {
+            await Linking.openURL(settings.statisticsLink);
+            // } else {
+            //   Alert.alert('Error', 'Cannot open this URL.', [{text: 'OK'}]);
+            // }
           } catch (error) {
             console.error('Error opening statistics link:', error);
             Alert.alert('Error', 'Failed to open the statistics link.', [
@@ -247,7 +321,7 @@ const HomeScreen = ({route, navigation}) => {
         }>
         {/* User Greeting with Profile Icon */}
         <View style={styles.greetingContainer}>
-          <Text style={styles.greetingText}>Welcome, {user.name}!</Text>
+          <Text style={styles.greetingText}>Welcome, {user.fullName}!</Text>
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => navigation.navigate('EditProfileScreen', {user})}>
@@ -256,96 +330,112 @@ const HomeScreen = ({route, navigation}) => {
         </View>
 
         {/* Hero Image Carousel */}
-        <View style={styles.heroContainer}>
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            style={styles.imageCarousel}>
-            {sliders.map(slider => (
-              <View key={slider.id} style={styles.imageContainer}>
-                <Image
-                  source={{
-                    uri: slider.image_url.startsWith('http')
-                      ? slider.image_url
-                      : `${BASE_URL}${slider.image_url}`,
-                  }}
-                  style={styles.heroImage}
-                  onError={error =>
-                    console.log('Image load error:', error.nativeEvent.error)
-                  }
+        {settings.modulesVisibility.sliders && (
+          <View style={styles.heroContainer}>
+            <ScrollView
+              ref={scrollViewRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              style={[
+                styles.imageCarousel,
+                {height: sliderHeight, width: screenWidth},
+              ]}>
+              {sliders.map(slider => (
+                <View
+                  key={slider._id}
+                  style={[
+                    styles.imageContainer,
+                    {height: sliderHeight, width: screenWidth},
+                  ]}
+                >
+                  <Image
+                    source={{
+                      uri: slider.imageUrl.startsWith('https')
+                        ? slider.imageUrl
+                        : `${BASE_URL}${slider.imageUrl}`,
+                    }}
+                    style={styles.heroImage}
+                    onError={error =>
+                      console.log('Image load error:', error.nativeEvent.error)
+                    }
+                  />
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.pageIndicators}>
+              {sliders.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.indicator,
+                    currentImageIndex === index && styles.activeIndicator,
+                  ]}
                 />
+              ))}
+            </View>
+
+            {/* Text Crawler */}
+            <View style={styles.crawlerContainer}>
+              <View style={styles.crawlerWrapper}>
+                <Animated.Text
+                  style={[
+                    styles.crawlerText,
+                    {
+                      transform: [{translateX: crawlAnimation}],
+                    },
+                  ]}>
+                  {content.content}
+                </Animated.Text>
+                <Animated.Text
+                  style={[
+                    styles.crawlerText,
+                    {
+                      transform: [
+                        {
+                          translateX: Animated.add(crawlAnimation, width),
+                        },
+                      ],
+                    },
+                  ]}>
+                  {content.content}
+                </Animated.Text>
               </View>
-            ))}
-          </ScrollView>
-
-          <View style={styles.pageIndicators}>
-            {sliders.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.indicator,
-                  currentImageIndex === index && styles.activeIndicator,
-                ]}
-              />
-            ))}
-          </View>
-
-          {/* Text Crawler */}
-          <View style={styles.crawlerContainer}>
-            <View style={styles.crawlerWrapper}>
-              <Animated.Text
-                style={[
-                  styles.crawlerText,
-                  {
-                    transform: [{translateX: crawlAnimation}],
-                  },
-                ]}>
-                Stay updated with the latest news and announcements
-              </Animated.Text>
-              <Animated.Text
-                style={[
-                  styles.crawlerText,
-                  {
-                    transform: [
-                      {
-                        translateX: Animated.add(crawlAnimation, width),
-                      },
-                    ],
-                  },
-                ]}>
-                Stay updated with the latest news and announcements
-              </Animated.Text>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Activities Section */}
         <View style={styles.activitiesContainer}>
           <View style={{height: heightPercentageToDP(2)}} />
           <Text style={styles.sectionTitle}>Activities</Text>
           <View style={styles.activitiesGrid}>
-            {activities.map(activity => (
-              <TouchableOpacity
-                key={activity.id}
-                style={[styles.activityCard, {backgroundColor: activity.color}]}
-                onPress={() => handleActivityPress(activity)}
-                activeOpacity={0.8}>
-                <View style={styles.cardContent}>
-                  <Ionicons
-                    name={activity.icon}
-                    size={24}
-                    color="#FFFFFF"
-                    style={styles.cardIcon}
-                  />
-                  <Text style={styles.cardTitle}>{activity.title}</Text>
-                  <Text style={styles.cardSubtitle}>{activity.subtitle}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {activities
+              .filter(activity => activity.visible)
+              .map(activity => (
+                <TouchableOpacity
+                  key={activity.id}
+                  style={[
+                    styles.activityCard,
+                    {backgroundColor: activity.color},
+                  ]}
+                  onPress={() => handleActivityPress(activity)}
+                  activeOpacity={0.8}>
+                  <View style={styles.cardContent}>
+                    <Ionicons
+                      name={activity.icon}
+                      size={24}
+                      color="#FFFFFF"
+                      style={styles.cardIcon}
+                    />
+                    <Text style={styles.cardTitle}>{activity.title}</Text>
+                    <Text style={styles.cardSubtitle}>{activity.subtitle}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
           </View>
         </View>
       </ScrollView>
@@ -391,27 +481,25 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   imageCarousel: {
-    height: 200,
     width: width,
   },
   imageContainer: {
     width: width,
-    height: 200,
-    paddingHorizontal: '1.5%',
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
   },
   heroImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    resizeMode: 'contain',
   },
   pageIndicators: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'absolute',
-    bottom: 16,
-    left: 0,
-    right: 0,
+    marginTop: 10,
   },
   indicator: {
     width: 8,
@@ -425,7 +513,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   crawlerContainer: {
-    backgroundColor: '#2563EB',
+    // backgroundColor: '#8a9ecaff',
     paddingVertical: 8,
     overflow: 'hidden',
     width: '91%',
@@ -436,9 +524,9 @@ const styles = StyleSheet.create({
   },
   crawlerText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: '#000',
     fontWeight: '500',
-    paddingHorizontal: 10, // Ensure text doesn't touch edges
+    paddingHorizontal: 10,
   },
   activitiesContainer: {
     paddingHorizontal: 20,

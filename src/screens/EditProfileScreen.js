@@ -14,8 +14,8 @@ import {heightPercentageToDP} from 'react-native-responsive-screen';
 
 const EditProfileScreen = ({route, navigation}) => {
   const {user} = route.params;
-  const [name, setName] = useState(user.name || '');
-  const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || '');
+  const [name, setName] = useState(user.fullName || '');
+  const [mobileNumber, setmobileNumber] = useState(user.mobileNumber || '');
   const [isLoading, setIsLoading] = useState(false);
 
   // Save updated profile to AsyncStorage
@@ -25,14 +25,14 @@ const EditProfileScreen = ({route, navigation}) => {
       return;
     }
 
-    if (!phoneNumber.trim()) {
+    if (!mobileNumber.trim()) {
       Alert.alert('Error', 'Please enter your phone number.', [{text: 'OK'}]);
       return;
     }
 
     try {
       setIsLoading(true);
-      const updatedUser = {...user, name, phoneNumber};
+      const updatedUser = {...user, name, mobileNumber};
       await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
       Alert.alert('Success', 'Profile updated successfully!', [
         {
@@ -74,8 +74,8 @@ const EditProfileScreen = ({route, navigation}) => {
         <Text style={styles.label}>Phone Number</Text>
         <TextInput
           style={styles.input}
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          value={mobileNumber}
+          onChangeText={setmobileNumber}
           placeholder="Enter your phone number"
           placeholderTextColor="#9CA3AF"
           keyboardType="phone-pad"
@@ -89,6 +89,7 @@ const EditProfileScreen = ({route, navigation}) => {
             {isLoading ? 'Saving...' : 'Save Changes'}
           </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.delButton, isLoading && styles.disabledButton]}
           onPress={handleSave}
@@ -96,6 +97,12 @@ const EditProfileScreen = ({route, navigation}) => {
           <Text style={styles.saveButtonText}>
             {isLoading ? 'Deleting...' : 'Delete Profile'}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.logutButton, isLoading && styles.disabledButton]}
+          onPress={handleSave}
+          disabled={isLoading}>
+          <Text style={styles.saveButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -150,6 +157,13 @@ const styles = StyleSheet.create({
   },
   delButton: {
     backgroundColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  logutButton: {
+    backgroundColor: 'gray',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

@@ -1,7 +1,7 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
-import {Provider as PaperProvider} from 'react-native-paper';
+import {BottomNavigation, Provider as PaperProvider} from 'react-native-paper';
 
 // Import screens (we'll create these files later)
 import LoginScreen from '../screens/LoginScreen';
@@ -14,6 +14,7 @@ import NewPasswordScreen from '../screens/NewPasswordScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import SplashScreen from '../screens/SplashScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import BottomNavigator from './BottomNavigator';
 
 const Stack = createStackNavigator();
 
@@ -21,7 +22,7 @@ const AppNavigator = () => {
   return (
     <PaperProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Splash">
+        <Stack.Navigator>
           <Stack.Screen
             name="Splash"
             component={SplashScreen}
@@ -55,6 +56,11 @@ const AppNavigator = () => {
           <Stack.Screen
             name="NewPasswordScreen"
             component={NewPasswordScreen}
+            options={{headerShown: false}}
+          />
+          <Stack.Screen
+            name="BottomNavigator"
+            component={BottomNavigator}
             options={{headerShown: false}}
           />
           <Stack.Screen
