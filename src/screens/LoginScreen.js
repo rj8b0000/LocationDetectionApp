@@ -36,10 +36,13 @@ const LoginScreen = ({navigation}) => {
   const handleSignIn = async () => {
     setLoading(true);
     try {
-      const response = await axios.post('http://10.0.2.2:8080/api/auth/login', {
-        mobileNumber: mobileNumber, // Updated to match API spec
-        password: password,
-      });
+      const response = await axios.post(
+        'http://147.93.110.242:8080/api/auth/login',
+        {
+          mobileNumber: mobileNumber, // Updated to match API spec
+          password: password,
+        },
+      );
       console.log('Login Response:', response.data);
       // Store user and token in AsyncStorage
       await storeUser(response.data.user, response.data.token);
@@ -68,7 +71,7 @@ const LoginScreen = ({navigation}) => {
     setLoading(true);
     try {
       const response = await axios.post(
-        'http://10.0.2.2:8080/api/auth/register',
+        'http://147.93.110.242:8080/api/auth/register',
         {
           fullName: fullName, // Updated to match API spec
           mobileNumber: mobileNumber, // Updated to match API spec

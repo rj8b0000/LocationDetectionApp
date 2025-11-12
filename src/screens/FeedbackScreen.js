@@ -38,7 +38,7 @@ const FeedbackScreen = ({route, navigation}) => {
       console.log('Payload: ', payload);
 
       const response = await axios.post(
-        'http://10.0.2.2:8080/api/feedback',
+        'http://147.93.110.242:8080/api/feedback',
         payload,
         {headers: {'Content-Type': 'application/json'}},
       );

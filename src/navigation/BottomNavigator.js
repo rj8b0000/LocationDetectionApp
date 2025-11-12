@@ -36,14 +36,16 @@ const BottomNavigator = () => {
         tabBarStyle: {
           position: 'absolute',
           bottom: bottomSpace,
-          left: SIDE_MARGIN,
-          right: SIDE_MARGIN,
+          // left: SIDE_MARGIN,
+          // right: SIDE_MARGIN,
           height: TAB_HEIGHT,
           borderRadius: 24,
           backgroundColor: '#FFFFFF',
           borderWidth: 1,
           borderColor: '#D1D5DB',
           overflow: 'visible',
+          width: '93%',
+          marginHorizontal: '3.5%',
           paddingBottom,
         },
         tabBarItemStyle: {

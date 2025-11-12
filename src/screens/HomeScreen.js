@@ -42,7 +42,9 @@ const HomeScreen = ({route, navigation}) => {
   // Animation value for crawler
   const crawlAnimation = useRef(new Animated.Value(0)).current;
   // Track screen width for responsive carousel (updates on orientation changes)
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenWidth, setScreenWidth] = useState(
+    Dimensions.get('window').width,
+  );
   useEffect(() => {
     const onChange = ({window}) => {
       setScreenWidth(window.width);
@@ -55,10 +57,13 @@ const HomeScreen = ({route, navigation}) => {
     };
   }, []);
   // Responsive slider height based on screen width (16:9), clamped
-  const sliderHeight = Math.max(180, Math.min(320, Math.round((screenWidth * 9) / 16)));
+  const sliderHeight = Math.max(
+    180,
+    Math.min(320, Math.round((screenWidth * 9) / 16)),
+  );
 
   // Base URL for slider images
-  const BASE_URL = 'http://10.0.2.2:8080';
+  const BASE_URL = 'http://147.93.110.242:8080';
 
   // Default hero images (fallback if API fails)
   const defaultHeroImages = [
@@ -91,7 +96,9 @@ const HomeScreen = ({route, navigation}) => {
   // Fetch settings from API
   const fetchSettings = async () => {
     try {
-      const response = await axios.get('http://10.0.2.2:8080/api/settings');
+      const response = await axios.get(
+        'http://147.93.110.242:8080/api/settings',
+      );
       setSettings(response.data);
       console.log('Settings fetched:', response.data);
     } catch (error) {
@@ -109,7 +116,9 @@ const HomeScreen = ({route, navigation}) => {
       return;
     }
     try {
-      const response = await axios.get('http://10.0.2.2:8080/api/sliders');
+      const response = await axios.get(
+        'http://147.93.110.242:8080/api/sliders',
+      );
       // Filter active sliders and sort by order
       const activeSliders = response.data
         .filter(slider => slider.isActive)
@@ -126,7 +135,9 @@ const HomeScreen = ({route, navigation}) => {
   };
   const fetchContent = async () => {
     try {
-      const response = await axios.get('http://10.0.2.2:8080/api/contents');
+      const response = await axios.get(
+        'http://147.93.110.242:8080/api/contents',
+      );
       setContent(response.data);
       console.log('Content fetched:', response.data);
     } catch (error) {
@@ -158,7 +169,7 @@ const HomeScreen = ({route, navigation}) => {
       const nextIndex = (currentImageIndex + 1) % sliders.length;
       setCurrentImageIndex(nextIndex);
       scrollViewRef.current?.scrollTo({
-        x: nextIndex * screenWidth,
+        x: nextIndex * (screenWidth - 32),
         animated: true,
       });
     }, settings.sliderAutoScrollInterval);
@@ -235,7 +246,7 @@ const HomeScreen = ({route, navigation}) => {
 
   const handleScroll = event => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const index = Math.round(scrollPosition / screenWidth);
+    const index = Math.round(scrollPosition / (screenWidth - 32));
     setCurrentImageIndex(index);
   };
 
@@ -341,16 +352,15 @@ const HomeScreen = ({route, navigation}) => {
               scrollEventThrottle={16}
               style={[
                 styles.imageCarousel,
-                {height: sliderHeight, width: screenWidth},
+                {height: sliderHeight, width: screenWidth - 32},
               ]}>
               {sliders.map(slider => (
                 <View
                   key={slider._id}
                   style={[
                     styles.imageContainer,
-                    {height: sliderHeight, width: screenWidth},
-                  ]}
-                >
+                    {height: sliderHeight, width: screenWidth - 32},
+                  ]}>
                   <Image
                     source={{
                       uri: slider.imageUrl.startsWith('https')
@@ -479,13 +489,13 @@ const styles = StyleSheet.create({
   heroContainer: {
     position: 'relative',
     marginBottom: 32,
+    marginHorizontal: 16,
   },
   imageCarousel: {
-    width: width,
+    width: width - 32,
   },
   imageContainer: {
-    width: width,
-    paddingHorizontal: 16,
+    width: width - 32,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#F3F4F6',
@@ -514,7 +524,7 @@ const styles = StyleSheet.create({
   },
   crawlerContainer: {
     // backgroundColor: '#8a9ecaff',
-    paddingVertical: 8,
+    // paddingVertical: 8,
     overflow: 'hidden',
     width: '91%',
     marginHorizontal: '4%',
@@ -523,9 +533,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   crawlerText: {
-    fontSize: 14,
+    fontSize: 18,
     color: '#000',
-    fontWeight: '500',
+    fontWeight: 'bold',
     paddingHorizontal: 10,
   },
   activitiesContainer: {
