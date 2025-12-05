@@ -6,31 +6,21 @@ import {
   Platform,
   PermissionsAndroid,
 } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapView, {PROVIDER_GOOGLE, Marker, Polygon} from 'react-native-maps';
+import Geolocation from '@react-native-community/geolocation';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
-import {Button, Text} from 'react-native-paper';
+import {Text} from 'react-native-paper';
 import {TouchableOpacity} from 'react-native';
 import Entypo from 'react-native-vector-icons/Entypo';
 import AntDesign from 'react-native-vector-icons/AntDesign';
-import {useNavigation} from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-MapLibreGL.setAccessToken(null);
-
-const EMPTY_BASE_STYLE = {
-  version: 8,
-  name: 'Empty',
-  sources: {},
-  layers: [
-    {id: 'bg', type: 'background', paint: {'background-color': '#f8f4f0'}},
-  ],
-};
-
+// ASK FINE LOCATION (Android only – iOS handled via Info.plist)
 const requestFineLocation = async () => {
-  if (Platform.OS !== 'android') return true;
+  // if (Platform.OS !== 'android') return true;
   const res = await PermissionsAndroid.request(
     PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     {
@@ -59,29 +49,14 @@ const pointInPolygon = (point, polygon) => {
   return inside;
 };
 
-const computeBounds = (polygon, user) => {
-  let minLat = Infinity,
-    minLon = Infinity,
-    maxLat = -Infinity,
-    maxLon = -Infinity;
-  const all = [...polygon, user];
-  for (const [lat, lon] of all) {
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon;
-    if (lon > maxLon) maxLon = lon;
-  }
-  return {ne: [maxLon, maxLat], sw: [minLon, minLat]}; // [lon, lat]
-};
-
 export default function LocationGate({navigation}) {
   const [loading, setLoading] = useState(true);
   const [polygon, setPolygon] = useState([]); // [[lat, lon], ...]
   const [user, setUser] = useState(null); // [lat, lon]
   const [inside, setInside] = useState(null);
-  const cameraRef = useRef(null);
-  // const navigation = useNavigation();
+  const mapRef = useRef(null);
 
+  // Fetch polygon from API
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -90,6 +65,8 @@ export default function LocationGate({navigation}) {
         const resp = await fetch('http://147.93.110.242:8080/api/coordinates');
         const data = await resp.json();
         if (!resp.ok) throw new Error('Failed to fetch polygon');
+
+        // GeoJSON: [lon, lat] -> we store [lat, lon]
         const coords = data[0].polygon.coordinates[0].map(([lon, lat]) => [
           parseFloat(lat),
           parseFloat(lon),
@@ -106,16 +83,7 @@ export default function LocationGate({navigation}) {
     };
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      const ok = await requestFineLocation();
-      if (!ok)
-        Alert.alert(
-          'Permission denied',
-          'Enable location permission to continue.',
-        );
-    })();
-  }, []);
+  // AsyncStorage user fetch
   const getStoredUser = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
@@ -125,6 +93,7 @@ export default function LocationGate({navigation}) {
       return null;
     }
   };
+
   const handleNavigation = async () => {
     const user = await getStoredUser();
     if (user) {
@@ -135,37 +104,85 @@ export default function LocationGate({navigation}) {
       navigation.replace('Login');
     }
   };
+
+  // Location update handler (Geolocation)
   const onUserLocationUpdate = useCallback(
-    loc => {
-      if (!loc?.coords) return;
-      const {latitude, longitude} = loc.coords;
+    position => {
+      if (!position?.coords) return;
+      const {latitude, longitude} = position.coords;
       const next = [latitude, longitude];
       setUser(next);
 
       if (polygon?.length) {
+        // Check inside / outside
         setInside(pointInPolygon(next, polygon));
+
+        // Fit map to include polygon + user
         try {
-          const {ne, sw} = computeBounds(polygon, next);
-          cameraRef.current?.fitBounds(ne, sw, 80, 80, 80, 80, 600);
-        } catch {}
+          const coordsForMap = [
+            ...polygon.map(([lat, lon]) => ({
+              latitude: lat,
+              longitude: lon,
+            })),
+            {latitude, longitude},
+          ];
+
+          if (mapRef.current && coordsForMap.length > 0) {
+            mapRef.current.fitToCoordinates(coordsForMap, {
+              edgePadding: {top: 80, bottom: 80, left: 80, right: 80},
+              animated: true,
+            });
+          }
+        } catch (e) {
+          // fail silently
+        }
       }
     },
     [polygon],
   );
 
-  const polygonGeoJSON = useMemo(() => {
-    if (!polygon?.length) return null;
-    const ring = polygon.map(([lat, lon]) => [lon, lat]); // to [lon, lat]
-    const closed =
-      ring[0][0] === ring[ring.length - 1][0] &&
-      ring[0][1] === ring[ring.length - 1][1]
-        ? ring
-        : [...ring, ring[0]];
-    return {
-      type: 'Feature',
-      geometry: {type: 'Polygon', coordinates: [closed]},
-      properties: {},
+  // Request permission + start watching location
+  useEffect(() => {
+    let watchId = null;
+
+    (async () => {
+      const ok = await requestFineLocation();
+      if (!ok) {
+        Alert.alert(
+          'Permission denied',
+          'Enable location permission to continue.',
+        );
+        return;
+      }
+
+      watchId = Geolocation.watchPosition(
+        onUserLocationUpdate,
+        err => {
+          console.log('Location error:', err);
+        },
+        {
+          enableHighAccuracy: true,
+          distanceFilter: 5,
+          timeout: 15000,
+          maximumAge: 10000,
+        },
+      );
+    })();
+
+    return () => {
+      if (watchId !== null) {
+        Geolocation.clearWatch(watchId);
+      }
     };
+  }, [onUserLocationUpdate]);
+
+  // Polygon for react-native-maps
+  const polygonLatLng = useMemo(() => {
+    if (!polygon?.length) return [];
+    return polygon.map(([lat, lon]) => ({
+      latitude: lat,
+      longitude: lon,
+    }));
   }, [polygon]);
 
   if (loading) {
@@ -177,141 +194,133 @@ export default function LocationGate({navigation}) {
     );
   }
 
+  // Initial region (fallback while we wait for user & fitToCoordinates)
+  const initialRegion = {
+    latitude: polygonLatLng[0]?.latitude || 18.5204, // Pune default
+    longitude: polygonLatLng[0]?.longitude || 73.8567,
+    latitudeDelta: 0.1,
+    longitudeDelta: 0.1,
+  };
+
   return (
     <View style={{flex: 1}}>
-      <MapLibreGL.MapView
+      <MapView
+        ref={mapRef}
         style={{flex: 1}}
-        styleJSON={EMPTY_BASE_STYLE}
-        compassEnabled
-        logoEnabled={false}>
-        <MapLibreGL.Camera ref={cameraRef} zoomLevel={12} />
-
-        {/* Leaflet-like base (OSM raster) */}
-        <MapLibreGL.RasterSource
-          id="osm"
-          tileSize={256}
-          tileUrlTemplates={[
-            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ]}>
-          <MapLibreGL.RasterLayer id="osm-layer" sourceID="osm" />
-        </MapLibreGL.RasterSource>
-
-        {/* Your polygon */}
-        {polygonGeoJSON && (
-          <MapLibreGL.ShapeSource id="poly" shape={polygonGeoJSON}>
-            <MapLibreGL.FillLayer
-              id="polyFill"
-              style={{
-                fillColor: '#ffb7006f',
-                fillOutlineColor: '#000',
-              }}
-            />
-          </MapLibreGL.ShapeSource>
+        provider={PROVIDER_GOOGLE}
+        initialRegion={initialRegion}
+        showsUserLocation={false} // we use our own marker below
+      >
+        {/* Polygon */}
+        {polygonLatLng.length > 0 && (
+          <Polygon
+            coordinates={polygonLatLng}
+            strokeWidth={2}
+            strokeColor="#000000"
+            fillColor="#ffb7006f"
+          />
         )}
 
-        {/* User location stream */}
-        <MapLibreGL.UserLocation
-          visible
-          onUpdate={onUserLocationUpdate}
-          showsUserHeadingIndicator
-        />
-      </MapLibreGL.MapView>
+        {/* User marker (always show when we have location) */}
+        {user && (
+          <Marker
+            coordinate={{
+              latitude: user[0],
+              longitude: user[1],
+            }}
+          />
+        )}
+      </MapView>
 
       {inside !== null && (
         <View style={{backgroundColor: '#fff'}}>
           {inside ? (
-            <>
-              <View
-                style={{
-                  width: wp(100),
-                  height: hp(20),
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}>
-                <View style={{flexDirection: 'row', gap: 10}}>
-                  <AntDesign name="checkcircle" color="#22C55E" size={30} />
-                  <Text
-                    style={{
-                      fontFamily: 'Inter',
-                      fontSize: wp(5.5),
-                      fontWeight: 'bold',
-                      color: '#000',
-                    }}>
-                    You are inside the region
-                  </Text>
-                </View>
-
-                <TouchableOpacity
+            <View
+              style={{
+                width: wp(100),
+                height: hp(20),
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <AntDesign name="checkcircle" color="#22C55E" size={30} />
+                <Text
                   style={{
-                    width: wp(80),
-                    backgroundColor: '#2563EB',
-                    height: hp(6),
-                    borderRadius: 8,
-                    elevation: 5,
-                    marginVertical: '5%',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                  onPress={handleNavigation}>
-                  <Text
-                    style={{
-                      fontFamily: 'Inter',
-                      fontSize: wp(4.5),
-                      fontWeight: 'bold',
-                      color: '#fff',
-                    }}>
-                    Continue to App
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              <View
-                style={{
-                  width: wp(100),
-                  height: hp(20),
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}>
-                <View style={{flexDirection: 'row', gap: 10}}>
-                  <Entypo name="circle-with-cross" color="#C53522" size={30} />
-                  <Text
-                    style={{
-                      fontFamily: 'Inter',
-                      fontSize: wp(5.5),
-                      fontWeight: 'bold',
-                      color: '#000',
-                    }}>
-                    You are outside the region
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={{
-                    width: wp(80),
-                    backgroundColor: '#6B717D',
-                    height: hp(6),
-                    borderRadius: 8,
-                    elevation: 5,
-                    marginVertical: '5%',
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    fontFamily: 'Inter',
+                    fontSize: wp(5.5),
+                    fontWeight: 'bold',
+                    color: '#000',
                   }}>
-                  <Text
-                    style={{
-                      fontFamily: 'Inter',
-                      fontSize: wp(4.5),
-                      fontWeight: 'bold',
-                      color: '#fff',
-                    }}>
-                    Get Inside to Continue to App
-                  </Text>
-                </TouchableOpacity>
+                  You are inside the region
+                </Text>
               </View>
-            </>
+
+              <TouchableOpacity
+                style={{
+                  width: wp(80),
+                  backgroundColor: '#2563EB',
+                  height: hp(6),
+                  borderRadius: 8,
+                  elevation: 5,
+                  marginVertical: '5%',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+                onPress={handleNavigation}>
+                <Text
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: wp(4.5),
+                    fontWeight: 'bold',
+                    color: '#fff',
+                  }}>
+                  Continue to App
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View
+              style={{
+                width: wp(100),
+                height: hp(20),
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <Entypo name="circle-with-cross" color="#C53522" size={30} />
+                <Text
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: wp(5.5),
+                    fontWeight: 'bold',
+                    color: '#000',
+                  }}>
+                  You are outside the region
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  width: wp(80),
+                  backgroundColor: '#6B717D',
+                  height: hp(6),
+                  borderRadius: 8,
+                  elevation: 5,
+                  marginVertical: '5%',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                <Text
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: wp(4.5),
+                    fontWeight: 'bold',
+                    color: '#fff',
+                  }}>
+                  Get Inside to Continue to App
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       )}
